@@ -33,7 +33,7 @@ Cada Lab tiene su propia Google Sheet. No pegues este script en la hoja de otra 
    - Quién tiene acceso: **Cualquier usuario**.
 4. Autoriza y copia la URL que termina en `/exec`.
 5. En `index.html`, busca `const SHEET_WEBAPP_URL="";` y pega la URL entre las comillas.
-6. Sube de nuevo `index.html`. Cambia la versión en los dos archivos: `VERSION` en `index.html` (de `2026.10.08-F1` a `-F2`) y `CACHE_NAME` en `sw.js` (igual).
+6. Sube de nuevo `index.html`. Cambia la versión en los dos archivos: `VERSION` en `index.html` (de `2026.10.08-F2` a `-F3`) y `CACHE_NAME` en `sw.js` (igual).
 
 Cada vez que edites el Apps Script: **Implementar → Gestionar implementaciones → editar → Nueva versión** (la URL no cambia).
 
@@ -61,4 +61,4 @@ Cada ingreso, cada lote producido y cada cierre de sesión, con: integrantes y c
 
 ## Para verificar que un cambio llegó
 
-El pie del panel docente muestra la versión (`2026.10.08-F1`). Cámbiala en `VERSION` dentro de `index.html` y en `CACHE_NAME` de `sw.js` cada vez que publiques.
+El pie del panel docente muestra la versión (`2026.10.08-F2`). Cámbiala en `VERSION` dentro de `index.html` y en `CACHE_NAME` de `sw.js` cada vez que publiques.
