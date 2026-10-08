@@ -1,6 +1,6 @@
 // CerveLab · service worker
 // Al publicar una versión nueva de index.html, cambia CACHE_NAME (por ejemplo, de -F1 a -F2) y VERSION en index.html.
-const CACHE_NAME = 'cervelab-2026.10.08-F1';
+const CACHE_NAME = 'cervelab-2026.10.08-F2';
 const ASSETS = [
   './', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
