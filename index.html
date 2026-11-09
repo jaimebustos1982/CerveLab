@@ -989,8 +989,6 @@ const TX={
   scene.environment=env;pm.dispose()})();
 
 scene.add(new THREE.HemisphereLight(0xf4fbf8,0x6a7d74,0.35));
-const sun=new THREE.DirectionalLight(0xfff3e2,0.95);sun.position.set(-9,17,11);sun.castShadow=true;
-sun.shadow.mapSize.set(LOWEND?1024:2048,LOWEND?1024:2048);Object.assign(sun.shadow.camera,{left:-22,right:22,top:14,bottom:-14,near:1,far:52});sun.shadow.bias=-0.0004;sun.shadow.normalBias=0.02;sun.shadow.radius=3;scene.add(sun);
 
 const std=o=>new THREE.MeshStandardMaterial(o);
 const mat={
