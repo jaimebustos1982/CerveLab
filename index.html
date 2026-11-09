@@ -803,7 +803,7 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
 renderer.physicallyCorrectLights=true;            // ← luces físicas
 renderer.shadowMap.enabled=true;
-renderer.shadowMap.type=THREE.VSMShadowMap;       // ← sombras suaves
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;       // ← sombras suaves
 renderer.shadowMap.autoUpdate=false;
 renderer.info.autoReset=true;
 
