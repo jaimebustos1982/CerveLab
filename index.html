@@ -258,9 +258,17 @@ table.dt{font-size:12.5px}table.dt td,table.dt th{white-space:nowrap}table.dt td
 <div class="toast" id="toast" role="status"></div>
 <div class="boot" id="boot">Encendiendo la cervecería…</div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
+<!-- Post-procesado -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/SSAOPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/OutputPass.js"></script>
 <script>
 (function(){
 "use strict";
@@ -783,25 +791,161 @@ addEventListener("pagehide",logSessionEnd);
 async function fetchConfig(){if(!SHEET_WEBAPP_URL)return;try{const r=await fetch(SHEET_WEBAPP_URL+"?tipo=config");const j=await r.json();if(j&&typeof j==="object"&&(j.precios||"desbloquear" in j)){CONFIG={precios:j.precios||{},desbloquear:!!j.desbloquear};LS.set("cervelab-config",CONFIG);applyConfig();if(typeof refreshWorld==="function"&&profile){refreshWorld();renderHud()}}}catch(e){}}
 
 // ================== 3D ==================
+// ================== 3D ==================
 if(!window.THREE){$("#boot").textContent="No se pudo cargar el motor 3D. Revisa la conexión y recarga la página.";return}
 const canvas=$("#view");
 let renderer;
-try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:"high-performance"})}catch(e){$("#boot").textContent="Tu navegador no tiene WebGL activo, necesario para el recorrido 3D.";return}
+try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:"high-performance",alpha:false})}
+catch(e){$("#boot").textContent="Tu navegador no tiene WebGL activo, necesario para el recorrido 3D.";return}
+
 const LOWEND=Math.min(screen.width,screen.height)<500&&(navigator.hardwareConcurrency||4)<=4;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,LOWEND?1.25:1.75));
 renderer.outputEncoding=THREE.sRGBEncoding;
-renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.95;
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-const scene=new THREE.Scene();scene.background=new THREE.Color(0xD6CEC2);scene.fog=new THREE.Fog(0xD6CEC2,30,62);
-const camera=new THREE.PerspectiveCamera(70,1,0.05,120);camera.rotation.order="YXZ";
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.05;
+renderer.physicallyCorrectLights=true;            // ← luces físicas
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.VSMShadowMap;       // ← sombras suaves
+renderer.shadowMap.autoUpdate=false;
+renderer.info.autoReset=true;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xcfc6b8);
+scene.fog=new THREE.FogExp2(0xd6cec2,0.010);     // ← niebla exponencial sutil
+
+const camera=new THREE.PerspectiveCamera(55,1,0.08,120); // ← FOV más natural
+camera.rotation.order="YXZ";
 const ANISO=renderer.capabilities.getMaxAnisotropy();
+
+// ---------- entorno IBL HDR real ----------
+const pmrem=new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+(function loadEnv(){
+  const loader=new THREE.TextureLoader();
+  loader.setCrossOrigin("anonymous");
+  // HDR real de Three.js (Venice Sunset) — reflejos ricos en acero
+  loader.load(
+    "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/textures/equirectangular/venice_sunset_1k.hdr",
+    (tex)=>{
+      tex.mapping=THREE.EquirectangularReflectionMapping;
+      tex.encoding=THREE.RGBEEncoding;
+      const rt=pmrem.fromEquirectangular(tex);
+      scene.environment=rt.texture;
+      tex.dispose(); pmrem.dispose();
+      // Refrescar materiales que se crearon antes de tener envMap
+      scene.traverse(o=>{ if(o.material) [o.material].flat().forEach(m=>{ if(m&&m.isMeshStandardMaterial) m.needsUpdate=true; }); });
+      shadowsDirty();
+    },
+    undefined,
+    ()=>{ // fallback: cubemap procedural si falla la red
+      const es=new THREE.Scene();
+      es.add(new THREE.Mesh(new THREE.BoxGeometry(40,12,24),
+        new THREE.MeshBasicMaterial({color:0x6f7d76,side:THREE.BackSide})));
+      for(let i=-3;i<=3;i++){
+        const p=new THREE.Mesh(new THREE.PlaneGeometry(4,1.4),
+          new THREE.MeshBasicMaterial({color:0xfff3dc}));
+        p.rotation.x=Math.PI/2; p.position.set(i*5.5,5.8,0); es.add(p);
+      }
+      scene.environment=pmrem.fromScene(es,0.04).texture;
+      pmrem.dispose();
+    }
+  );
+})();
+
+// ---------- luces balanceadas (nave industrial + ventanales + sodio) ----------
+scene.add(new THREE.HemisphereLight(0xf6f0e4,0x2a2018,0.55));
+
+const sun=new THREE.DirectionalLight(0xfff2dc,2.2);
+sun.position.set(-9,17,11);
+sun.castShadow=true;
+sun.shadow.mapSize.set(LOWEND?1024:2048,LOWEND?1024:2048);
+Object.assign(sun.shadow.camera,{left:-22,right:22,top:14,bottom:-14,near:1,far:52});
+sun.shadow.bias=-0.0002;
+sun.shadow.normalBias=0.03;
+sun.shadow.radius=4;
+sun.shadow.blurSamples=16;
+scene.add(sun);
+
+// Relleno frío desde los ventanales del fondo
+const fill=new THREE.DirectionalLight(0xbcd4ff,0.45);
+fill.position.set(14,8,-12);
+scene.add(fill);
+
+// Luz cálida de sodio sobre la línea de envasado
+const sodium=new THREE.PointLight(0xffb060,1.2,20,2);
+sodium.position.set(-3,5.2,7.5);
+scene.add(sodium);
+
+// ---------- post-procesado ----------
+const composer=new THREE.EffectComposer(renderer);
+composer.setSize(innerWidth,innerHeight);
+composer.addPass(new THREE.RenderPass(scene,camera));
+
+let ssao=null;
+if(THREE.SSAOPass){
+  ssao=new THREE.SSAOPass(scene,camera,innerWidth,innerHeight);
+  ssao.kernelRadius=0.35;
+  ssao.minDistance=0.0015;
+  ssao.maxDistance=0.12;
+  composer.addPass(ssao);
+}
+
+let bloom=null;
+if(THREE.UnrealBloomPass){
+  bloom=new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.35,0.6,0.85);
+  composer.addPass(bloom);
+}
+
+// Viñeta + grano cinematográfico
+const vignettePass=new THREE.ShaderPass({
+  uniforms:{tDiffuse:{value:null},strength:{value:0.32},grain:{value:0.012}},
+  vertexShader:`varying vec2 vUv;
+    void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`uniform sampler2D tDiffuse;uniform float strength;uniform float grain;varying vec2 vUv;
+    void main(){
+      vec4 c=texture2D(tDiffuse,vUv);
+      float d=distance(vUv,vec2(0.5));
+      c.rgb*=1.0-strength*smoothstep(0.35,0.85,d);
+      float g=fract(sin(dot(vUv*vec2(12.9898,78.233),vec2(1.0)))*43758.5453);
+      c.rgb+=(g-0.5)*grain;
+      gl_FragColor=c;
+    }`
+});
+vignettePass.renderToScreen=true;
+composer.addPass(vignettePass);
 
 // ---------- texturas procedurales ----------
 let seed=11;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
-function ctex(w,h,draw,rep,srgb){const c=document.createElement("canvas");c.width=w;c.height=h;draw(c.getContext("2d"),w,h);
-  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep[0],rep[1]);t.anisotropy=ANISO;if(srgb)t.encoding=THREE.sRGBEncoding;return t}
+function ctex(w,h,draw,rep,srgb){
+  const c=document.createElement("canvas");c.width=w;c.height=h;
+  draw(c.getContext("2d"),w,h);
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  if(rep)t.repeat.set(rep[0],rep[1]);
+  t.anisotropy=ANISO;
+  if(srgb){t.encoding=THREE.sRGBEncoding;}else{t.encoding=THREE.LinearEncoding;}
+  return t;
+}
+
+// Normal map procedural del acero cepillado
+function makeBrushedNormal(size=512){
+  const c=document.createElement("canvas");c.width=size;c.height=size;
+  const x=c.getContext("2d");
+  x.fillStyle="#8080ff";x.fillRect(0,0,size,size);
+  for(let i=0;i<9000;i++){
+    const v=Math.random();
+    x.fillStyle=`rgb(${128+(v-0.5)*22|0},${128+(v-0.5)*22|0},255)`;
+    x.fillRect(Math.random()*size,Math.random()*size,30+Math.random()*220,1);
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.anisotropy=ANISO;
+  t.encoding=THREE.LinearEncoding;
+  return t;
+}
 const TX={
  brushed:ctex(512,512,(x,W,H)=>{x.fillStyle="#8a8a8a";x.fillRect(0,0,W,H);for(let i=0;i<7000;i++){const v=100+rnd()*70|0;x.fillStyle=`rgba(${v},${v},${v},.45)`;x.fillRect(rnd()*W,rnd()*H,30+rnd()*260,1)}}),
+ brushedNormal:makeBrushedNormal(512),
  floor:ctex(1024,1024,(x,W,H)=>{x.fillStyle="#8b8178";x.fillRect(0,0,W,H);
    for(let i=0;i<26000;i++){const v=rnd();x.fillStyle=v<.5?"rgba(255,255,255,.07)":"rgba(0,30,20,.09)";x.fillRect(rnd()*W,rnd()*H,1+rnd()*2,1+rnd()*2)}
    const g=x.createRadialGradient(W*.3,H*.4,10,W*.3,H*.4,W*.7);g.addColorStop(0,"rgba(255,255,255,.05)");g.addColorStop(1,"rgba(0,0,0,.05)");x.fillStyle=g;x.fillRect(0,0,W,H);
